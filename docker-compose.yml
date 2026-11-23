@@ -1,0 +1,25 @@
+services:
+  bot:
+    build: .
+    container_name: jollibee-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /app/data/jollibee.db
+    volumes:
+      - ./data:/app/data
+      - ./proxy.txt:/app/proxy.txt
+    networks:
+      - edge
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/payments/sepay/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 256m
+
+networks:
+  edge:
+    external: true
+    name: voucher-platform_edge

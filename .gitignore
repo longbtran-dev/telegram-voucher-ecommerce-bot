@@ -1,0 +1,35 @@
+# Secrets — KHÔNG commit
+.env
+.env.*
+!.env.demo
+!.env.example
+*.pem
+*_login_debug.txt
+log_*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+
+# Local/runtime artifacts
+.codegraph/
+data/
+*.zip
+*.log
+
+# Vendor / build (mã nguồn tham khảo, không cần track)
+**/vendor/
+**/node_modules/
+CODE-APIMBANK-20260704T031411Z-3-001/CODE-APIMBANK/public/AdminLTE3/
+
+# OS
+.DS_Store
+Thumbs.db
+**/proxy.txt

@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="data:,">
+  <title>Jollibee eGift - Trình tạo bản mô phỏng</title>
+  <style>
+    @font-face {
+      font-family: "Quicksand";
+      src: url("assets/fonts/Quicksand-Variable.ttf") format("truetype");
+      font-style: normal;
+      font-weight: 300 700;
+      font-display: swap;
+    }
+
+    :root {
+      --ink: #380606;
+      --plum: #720d5d;
+      --red: #ed1b2f;
+      --panel: #fff;
+      --canvas: #f0f3f5;
+      --shadow: 0 16px 46px rgb(22 60 132 / 14%);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; background: var(--canvas); }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: #1d2433;
+      font-family: "Quicksand", sans-serif;
+      background: linear-gradient(90deg, #fff 0 38%, transparent 38%), var(--canvas);
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .site-header {
+      position: fixed;
+      z-index: 10;
+      inset: 0 0 auto;
+      height: 60px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      box-shadow: 0 3px 6px rgb(22 60 132 / 16%);
+    }
+    .site-header img { width: 40px; height: 40px; object-fit: contain; }
+
+    .workspace {
+      width: min(940px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 92px 0 54px;
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+      gap: clamp(28px, 6vw, 74px);
+      align-items: start;
+    }
+
+    .builder {
+      position: sticky;
+      top: 88px;
+      padding: 26px;
+      border: 1px solid rgb(114 13 93 / 9%);
+      border-radius: 22px;
+      background: rgb(255 255 255 / 92%);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .builder h1 {
+      margin: 0;
+      color: #271224;
+      font-size: clamp(26px, 4vw, 38px);
+      line-height: 1.02;
+      letter-spacing: -.045em;
+    }
+    .intro {
+      margin: 14px 0 22px;
+      color: #60687a;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .field { display: grid; gap: 7px; margin-top: 14px; }
+    label {
+      color: #474e60;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .025em;
+    }
+    input {
+      width: 100%;
+      min-height: 44px;
+      border: 1px solid #d9dee8;
+      border-radius: 11px;
+      outline: none;
+      padding: 10px 12px;
+      background: #fff;
+      color: #1e2533;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+    input:focus { border-color: var(--plum); box-shadow: 0 0 0 4px rgb(114 13 93 / 9%); }
+    #voucher-code { text-transform: uppercase; letter-spacing: .04em; }
+    .form-error {
+      min-height: 19px;
+      margin: 10px 0 0;
+      color: #c5162b;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+    .button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 13px;
+      font-size: 13px;
+      font-weight: 800;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .button:hover { transform: translateY(-1px); }
+    .button-primary {
+      color: #fff;
+      background: var(--plum);
+      box-shadow: 0 8px 22px rgb(114 13 93 / 22%);
+    }
+    .button-secondary { border: 1px solid #d9dee8; color: #41495b; background: #fff; }
+    .privacy-note {
+      margin: 18px 0 0;
+      padding: 12px 13px;
+      border-radius: 12px;
+      color: #576074;
+      background: #f5f7fa;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+    .privacy-note strong { color: #262d3c; }
+
+    .preview-stage { min-width: 0; display: grid; place-items: start center; }
+    .voucher-card {
+      position: relative;
+      width: min(360px, 100%);
+      overflow: hidden;
+      border-radius: 10px;
+      padding: 12px;
+      background: var(--panel);
+      box-shadow: 0 3px 8px rgb(22 60 132 / 18%);
+      animation: card-in 520ms cubic-bezier(.2, .75, .25, 1) both;
+    }
+    .gift-image {
+      display: block;
+      width: 100%;
+      aspect-ratio: 640 / 335;
+      border-radius: 7px;
+      object-fit: cover;
+    }
+    .gift-copy { padding: 10px 4px 3px; text-align: center; }
+    .gift-title { color: var(--ink); font-size: 16px; line-height: 1.35; }
+    .gift-price { margin-top: 2px; color: var(--plum); font-size: 22px; font-weight: 800; }
+
+    .ticket-divider {
+      position: relative;
+      overflow: inherit;
+      margin: 0 -20px;
+      height: 16px;
+      padding: 0 25px;
+    }
+    .ticket-divider::before, .ticket-divider::after {
+      content: "";
+      width: 18px;
+      height: 26px;
+      position: absolute;
+      top: -6px;
+    }
+    .ticket-divider::before {
+      left: -1px;
+      background: url("assets/ticket-notch-left.png") no-repeat 0 0;
+      background-size: cover;
+    }
+    .ticket-divider::after {
+      right: 0;
+      background: url("assets/ticket-notch-right.png") no-repeat 0 0;
+      background-size: contain;
+    }
+    .ticket-divider span {
+      display: block;
+      border-bottom: 1px dashed #e0e0e0;
+      padding: 7px 0 0;
+    }
+
+    .code-info { padding: 7px 0 5px; text-align: center; }
+    .urbox-logo { display: block; height: 37px; margin: 0 auto 9px; }
+    .barcode-shell {
+      width: fit-content;
+      max-width: 94%;
+      margin: 0 auto;
+      overflow: hidden;
+      border-radius: 8px;
+      padding: 8px 12px 6px;
+      background: #fff;
+      box-shadow: 0 3px 10px rgb(22 60 132 / 16%);
+    }
+    #barcode { display: block; max-width: 100%; height: 50px; }
+    .copy-code {
+      display: inline-grid;
+      justify-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      border: 0;
+      padding: 0;
+      color: inherit;
+      background: transparent;
+    }
+    .copy-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: #292929;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .copy-icon {
+      width: 12px;
+      height: 12px;
+      flex: none;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.7;
+    }
+    .code-value {
+      color: var(--ink);
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: .02em;
+      word-break: break-all;
+    }
+    .simulation-note {
+      margin: 16px -12px -12px;
+      border-radius: 0 0 10px 10px;
+      padding: 5px 14px;
+      color: #6c3c08;
+      background: #fff3cf;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .18em;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    .toast {
+      position: fixed;
+      z-index: 30;
+      right: 22px;
+      bottom: 22px;
+      transform: translateY(18px);
+      border-radius: 12px;
+      padding: 12px 15px;
+      color: #fff;
+      background: #25202a;
+      box-shadow: 0 14px 36px rgb(0 0 0 / 20%);
+      font-size: 13px;
+      font-weight: 800;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .toast.is-visible { transform: translateY(0); opacity: 1; }
+    body.view-only .workspace {
+      width: min(520px, calc(100% - 28px));
+      grid-template-columns: 1fr;
+      padding-top: 92px;
+    }
+    body.view-only .builder { display: none; }
+    body.view-only .preview-stage { place-items: start center; }
+
+    @keyframes card-in {
+      from { transform: translateY(14px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @media (max-width: 760px) {
+      .workspace {
+        width: min(520px, calc(100% - 24px));
+        grid-template-columns: 1fr;
+        gap: 30px;
+        padding-top: 82px;
+      }
+      .builder { position: static; padding: 22px; }
+      .preview-stage { place-items: start center; }
+    }
+    @media (max-width: 410px) {
+      .workspace { width: 100%; padding-inline: 9px; }
+      .builder { border-radius: 17px; }
+      .actions { grid-template-columns: 1fr; }
+      .voucher-card { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+      }
+    }
+    @media print {
+      .site-header, .builder, .toast { display: none !important; }
+      body, html { background: #fff; }
+      .workspace { display: block; width: 360px; margin: 0 auto; padding: 0; }
+      .voucher-card { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header" aria-label="Jollibee">
+    <img src="assets/jollibee-mark.png" alt="Jollibee">
+  </header>
+
+  <main class="workspace">
+    <section class="builder" aria-labelledby="builder-title">
+      <p class="eyebrow">Local voucher preview</p>
+      <h1 id="builder-title">Tạo giao diện mã</h1>
+      <p class="intro">Nhập mã để tạo bản xem trước và barcode Code 128 ngay trên máy. Công cụ không kiểm tra hay kích hoạt voucher thật.</p>
+
+      <form id="voucher-form" novalidate>
+        <div class="field">
+          <label for="voucher-code">Mã voucher</label>
+          <input id="voucher-code" name="code" value="UB100K49D1399" minlength="4" maxlength="32" pattern="[A-Za-z0-9-]+" autocomplete="off" spellcheck="false" required>
+        </div>
+        <div class="field">
+          <label for="voucher-value">Mệnh giá (VND, tự nhận từ mã)</label>
+          <input id="voucher-value" name="value" type="number" value="100000" min="1000" max="100000000" step="1000" inputmode="numeric" required>
+        </div>
+        <p id="form-error" class="form-error" role="alert" aria-live="polite"></p>
+        <div class="actions">
+          <button class="button button-primary" type="submit">Tạo / cập nhật</button>
+          <button class="button button-secondary" id="open-preview" type="button">Mở bản xem</button>
+          <button class="button button-secondary" id="copy-link" type="button">Sao chép link</button>
+          <button class="button button-secondary" type="button" onclick="window.print()">In bản demo</button>
+        </div>
+      </form>
+
+      <p class="privacy-note"><strong>Riêng tư:</strong> Không có mã nào được gửi tới UrBox. Hình barcode được dựng bằng JavaScript cục bộ; nhãn mô phỏng luôn xuất hiện để tránh nhầm với voucher phát hành chính thức.</p>
+    </section>
+
+    <section class="preview-stage" aria-label="Bản xem trước voucher">
+      <article class="voucher-card">
+        <img class="gift-image" src="assets/jollibee-egift.png" alt="Jollibee eGift powered by UrBox">
+        <div class="gift-copy">
+          <div class="gift-title">[UrBox Voucher] JOLLIBEE</div>
+          <div class="gift-price" id="preview-value">100.000 đ</div>
+        </div>
+        <div class="ticket-divider" aria-hidden="true"><span></span></div>
+        <div class="code-info">
+          <img class="urbox-logo" src="assets/urbox-logo.svg" alt="UrBox">
+          <div class="barcode-shell">
+            <svg id="barcode" role="img" aria-label="Barcode Code 128"></svg>
+          </div>
+          <button class="copy-code" id="copy-code" type="button" aria-label="Sao chép mã voucher">
+            <span class="copy-hint">
+              <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect width="14" height="14" x="8" y="8" rx="2"></rect>
+                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>
+              </svg>
+              Nhấp vào mã để sao chép
+            </span>
+            <span class="code-value" id="preview-code">UB100K49D1399</span>
+          </button>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    const CODE128_PATTERNS = [
+      "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+      "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+      "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+      "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+      "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+      "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+      "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+      "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+      "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+      "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+      "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
+    ];
+
+    const form = document.querySelector("#voucher-form");
+    const codeInput = document.querySelector("#voucher-code");
+    const valueInput = document.querySelector("#voucher-value");
+    const errorOutput = document.querySelector("#form-error");
+    const toast = document.querySelector("#toast");
+    let toastTimer;
+
+    function encodeCode128B(text) {
+      const values = [...text].map((character) => character.charCodeAt(0) - 32);
+      const checksum = (104 + values.reduce((sum, value, index) => sum + value * (index + 1), 0)) % 103;
+      return [104, ...values, checksum, 106];
+    }
+
+    function drawBarcode(text) {
+      const quietZone = 10;
+      const modules = encodeCode128B(text).map((value) => CODE128_PATTERNS[value]).join("");
+      const width = quietZone * 2 + [...modules].reduce((sum, digit) => sum + Number(digit), 0);
+      let x = quietZone;
+      let isBar = true;
+      const bars = [];
+
+      for (const digit of modules) {
+        const moduleWidth = Number(digit);
+        if (isBar) bars.push(`<rect x="${x}" y="0" width="${moduleWidth}" height="50" />`);
+        x += moduleWidth;
+        isBar = !isBar;
+      }
+
+      const barcode = document.querySelector("#barcode");
+      barcode.setAttribute("viewBox", `0 0 ${width} 50`);
+      barcode.setAttribute("width", width);
+      barcode.setAttribute("height", 50);
+      barcode.setAttribute("shape-rendering", "crispEdges");
+      barcode.setAttribute("aria-label", `Barcode Code 128 cho mã ${text}`);
+      barcode.innerHTML = `<g fill="#111">${bars.join("")}</g>`;
+    }
+
+    function normalizeCode(value) {
+      return value.trim().toUpperCase();
+    }
+
+    function inferVoucherValue(code) {
+      const match = /^UB(\d+)K/.exec(code);
+      if (!match) return null;
+      const value = Number(match[1]) * 1000;
+      return Number.isSafeInteger(value) && value >= 1000 && value <= 100000000 ? value : null;
+    }
+
+    function validateCode(code) {
+      if (!/^[A-Z0-9-]{4,32}$/.test(code)) {
+        throw new Error("Mã cần dài 4–32 ký tự và chỉ gồm A–Z, 0–9 hoặc dấu gạch ngang.");
+      }
+    }
+
+    function formatMoney(value) {
+      return `${new Intl.NumberFormat("vi-VN").format(value)} đ`;
+    }
+
+    function currentData() {
+      const code = normalizeCode(codeInput.value);
+      validateCode(code);
+      const value = inferVoucherValue(code) ?? Number(valueInput.value);
+      valueInput.value = value;
+      if (!Number.isInteger(value) || value < 1000 || value > 100000000) {
+        throw new Error("Mệnh giá phải từ 1.000 đến 100.000.000 VND.");
+      }
+      return { code, value };
+    }
+
+    function render(data, updateUrl = true) {
+      codeInput.value = data.code;
+      document.querySelector("#preview-code").textContent = data.code;
+      document.querySelector("#preview-value").textContent = formatMoney(data.value);
+      drawBarcode(data.code);
+      errorOutput.textContent = "";
+
+      if (updateUrl) {
+        const url = new URL(location.href);
+        url.searchParams.set("code", data.code);
+        url.searchParams.set("value", data.value);
+        history.replaceState(null, "", url);
+      }
+    }
+
+    function loadFromUrl() {
+      const params = new URLSearchParams(location.search);
+      codeInput.value = params.get("code") || codeInput.value;
+      valueInput.value = params.get("value") || inferVoucherValue(normalizeCode(codeInput.value)) || valueInput.value;
+      document.body.classList.toggle("view-only", params.get("view") === "1");
+
+      try {
+        render(currentData(), false);
+      } catch (error) {
+        errorOutput.textContent = error.message;
+        codeInput.value = "UB100K49D1399";
+        valueInput.value = "100000";
+        render(currentData(), false);
+      }
+    }
+
+    function showToast(message) {
+      clearTimeout(toastTimer);
+      toast.textContent = message;
+      toast.classList.add("is-visible");
+      toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 1800);
+    }
+
+    async function copyText(text, successMessage) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const temporary = document.createElement("textarea");
+        temporary.value = text;
+        temporary.style.position = "fixed";
+        temporary.style.opacity = "0";
+        document.body.appendChild(temporary);
+        temporary.select();
+        document.execCommand("copy");
+        temporary.remove();
+      }
+      showToast(successMessage);
+    }
+
+    function shareUrl(viewOnly = false) {
+      const data = currentData();
+      const url = new URL(location.href);
+      url.searchParams.set("code", data.code);
+      url.searchParams.set("value", data.value);
+      if (viewOnly) url.searchParams.set("view", "1");
+      else url.searchParams.delete("view");
+      return url.toString();
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      try {
+        render(currentData());
+        showToast("Đã cập nhật bản xem trước");
+      } catch (error) {
+        errorOutput.textContent = error.message;
+      }
+    });
+
+    codeInput.addEventListener("input", () => {
+      codeInput.value = normalizeCode(codeInput.value);
+      const inferredValue = inferVoucherValue(codeInput.value);
+      if (inferredValue) valueInput.value = inferredValue;
+    });
+
+    document.querySelector("#copy-code").addEventListener("click", () => {
+      copyText(document.querySelector("#preview-code").textContent, "Đã sao chép mã");
+    });
+
+    document.querySelector("#copy-link").addEventListener("click", () => {
+      try {
+        copyText(shareUrl(true), "Đã sao chép link bản xem");
+      } catch (error) {
+        errorOutput.textContent = error.message;
+      }
+    });
+
+    document.querySelector("#open-preview").addEventListener("click", () => {
+      try {
+        window.open(shareUrl(true), "_blank", "noopener");
+      } catch (error) {
+        errorOutput.textContent = error.message;
+      }
+    });
+
+    console.assert(encodeCode128B("UB100K49D1399").at(-2) === 80, "Code 128 checksum self-check failed");
+    console.assert(inferVoucherValue("UB100K49D1399") === 100000, "UB100K value inference failed");
+    console.assert(inferVoucherValue("UB200KABC") === 200000, "UB200K value inference failed");
+    console.assert(inferVoucherValue("UB500KABC") === 500000, "UB500K value inference failed");
+    loadFromUrl();
+  </script>
+</body>
+</html>

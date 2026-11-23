@@ -1,0 +1,13 @@
+.env
+*.db
+*.db-*
+proxy.txt
+.git
+.codegraph
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+data
+jollibee-bot-deploy.zip
+*.zip
