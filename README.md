@@ -1,5 +1,7 @@
 # Bot Telegram bán voucher Jollibee tự động
 
+> 🤖 **Trải nghiệm Bot trực tiếp:** [@jollibee_dylan_bot](https://t.me/jollibee_dylan_bot)
+
 Bot bán mã voucher Jollibee (UrBox) qua Telegram, hỗ trợ thanh toán bằng ví hoặc
 QR SePay và tự động giao mã sau khi xác nhận thanh toán.
 
