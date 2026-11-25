@@ -62,6 +62,14 @@ class WalletAdminInput(StatesGroup):
     waiting_adjustment = State()
 
 
+class DeleteStock(StatesGroup):
+    waiting_codes = State()
+
+
+class BarcodeBuilder(StatesGroup):
+    waiting_codes = State()
+
+
 def admin_dashboard_text() -> str:
     stock = database.stock_summary()
     stock_label = " · ".join(
@@ -88,6 +96,10 @@ def admin_menu_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text="📦 Tồn kho", callback_data="admin:stock"),
             InlineKeyboardButton(text="➕ Nhập kho", callback_data="admin:import"),
+        ],
+        [
+            InlineKeyboardButton(text="🗑 Xoá mã kho", callback_data="admin:delete_stock"),
+            InlineKeyboardButton(text="🎫 Tạo HTML Barcode", callback_data="admin:barcode"),
         ],
         [InlineKeyboardButton(text="🧪 Công cụ check mã", callback_data="admin:checker")],
         [
@@ -169,13 +181,14 @@ async def on_admin_cancel(cb: CallbackQuery, state: FSMContext) -> None:
 
 
 # =========================
-# NHẬP KHO
+# NHẬP KHO (FILE .TXT HOẶC TIN NHẮN)
 # =========================
 async def _start_import(message: Message, state: FSMContext) -> None:
     await message.answer(
         "📥 <b>Nhập kho tự động phân loại</b>\n\n"
-        "Gửi file <b>.txt</b> chứa link UrBox hoặc mã <code>UB...</code>.\n"
-        "Bot chỉ đọc mã và phân loại mệnh giá để nhập nhanh. "
+        "• Gửi trực tiếp <b>tin nhắn chứa mã <code>UB...</code> / link UrBox</b> (mỗi mã 1 dòng), hoặc\n"
+        "• Gửi file <b>.txt</b> chứa danh sách mã.\n\n"
+        "Bot tự đọc mã và phân loại mệnh giá để nhập nhanh. "
         "Mã sẽ được kiểm tra trên Jollibee ngay trước lúc giao khách.",
         reply_markup=_admin_cancel_keyboard(),
     )
@@ -195,7 +208,7 @@ async def on_admin_import(cb: CallbackQuery, state: FSMContext) -> None:
         await cb.answer("Bạn không có quyền quản trị.", show_alert=True)
         return
     await _start_import(cb.message, state)
-    await cb.answer("Hãy gửi file kho .txt")
+    await cb.answer("Hãy gửi tin nhắn chứa mã hoặc file .txt")
 
 
 @router.message(Command("huy"), ImportStock.waiting_file)
@@ -208,19 +221,17 @@ async def cmd_cancel_import(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(ImportStock.waiting_file, F.document)
-async def on_import_file(message: Message, state: FSMContext, bot: Bot) -> None:
-    if not _is_admin(message.from_user.id):
-        return
-    await state.clear()
-
-    # Tải file về bộ nhớ và tách link/mã theo đúng thứ tự.
-    buf = await bot.download(message.document)
-    text = buf.read().decode("utf-8", errors="ignore")
+async def _import_vouchers_from_text(
+    message: Message, state: FSMContext, bot: Bot, text: str,
+) -> None:
     inputs = checker.extract_inputs(text)
     if not inputs:
-        await message.answer("File không có link UrBox hoặc mã UB hợp lệ.")
+        await message.answer(
+            "Không tìm thấy link UrBox hoặc mã UB hợp lệ. Vui lòng gửi lại hoặc bấm Huỷ thao tác.",
+            reply_markup=_admin_cancel_keyboard(),
+        )
         return
+    await state.clear()
 
     status_msg = await message.answer(
         f"⏳ Đang đọc & tự phân loại {len(inputs)} mã..."
@@ -276,7 +287,32 @@ async def on_import_file(message: Message, state: FSMContext, bot: Bot) -> None:
     if notified:
         summary.append(f"\n🔔 Đã báo <b>{notified}</b> khách đang chờ hàng.")
 
-    await status_msg.edit_text("\n".join(summary), reply_markup=_admin_back_keyboard())
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➕ Nhập thêm", callback_data="admin:import"),
+            InlineKeyboardButton(text="🗑 Xoá mã kho", callback_data="admin:delete_stock"),
+        ],
+        [InlineKeyboardButton(text="⬅️ Bảng điều khiển", callback_data="admin:home")],
+    ])
+    await status_msg.edit_text("\n".join(summary), reply_markup=kb)
+
+
+@router.message(ImportStock.waiting_file, F.document)
+async def on_import_file(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    buf = await bot.download(message.document)
+    text = buf.read().decode("utf-8", errors="ignore")
+    await _import_vouchers_from_text(message, state, bot, text)
+
+
+@router.message(ImportStock.waiting_file, F.text)
+async def on_import_text(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    if (message.text or "").strip().startswith("/"):
+        return
+    await _import_vouchers_from_text(message, state, bot, message.text or "")
 
 
 async def _notify_stock_waiters(bot: Bot, imported: dict[int, int]) -> int:
@@ -733,9 +769,16 @@ async def _send_stock(message: Message) -> None:
         for denom, count in summary.items()
     ]
     table = utils.mono_table(["Mệnh giá", "Còn lại", "Giá bán"], rows)
+    stock_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="➕ Nhập kho", callback_data="admin:import"),
+            InlineKeyboardButton(text="🗑 Xoá mã kho", callback_data="admin:delete_stock"),
+        ],
+        [InlineKeyboardButton(text="⬅️ Bảng điều khiển", callback_data="admin:home")],
+    ])
     await message.answer(
         "📦 <b>TỒN KHO HIỆN TẠI</b>\n" + table,
-        reply_markup=_admin_back_keyboard(),
+        reply_markup=stock_kb,
     )
 
     vouchers = database.list_available_vouchers()
@@ -2072,3 +2115,253 @@ async def on_admin_test_html(cb: CallbackQuery, bot: Bot) -> None:
         order_code="JBTEST99",
         vouchers=[("UB100KTEST01", 100_000), ("UB200KTEST02", 200_000)],
     )
+
+
+# =========================
+# XOÁ MÃ TRONG KHO (ADMIN)
+# =========================
+_BARCODE_CODE_TOKEN_RE = re.compile(r"^[A-Z0-9-]{4,32}$")
+_UB_DENOM_PREFIX_RE = re.compile(r"^UB(\d+)K?", re.IGNORECASE)
+
+
+def _extract_codes_for_delete(text: str) -> list[str]:
+    """Tách danh sách mã cần xoá từ tin nhắn (hỗ trợ cả mã gõ sai định dạng chuẩn)."""
+    codes: list[str] = []
+    seen: set[str] = set()
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        extracted = checker.extract_inputs(line)
+        tokens = extracted if extracted else re.split(r"[\s,;]+", line)
+        for token in tokens:
+            cleaned = token.strip().upper()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                codes.append(cleaned)
+    return codes
+
+
+async def _start_delete_stock(message: Message, state: FSMContext) -> None:
+    await message.answer(
+        "🗑 <b>Xoá mã đã thêm vào kho</b>\n\n"
+        "Gửi danh sách mã cần xoá khỏi kho (mỗi mã 1 dòng hoặc gửi file <b>.txt</b>).\n"
+        "• Chỉ xoá các mã đang ở trạng thái <b>còn trong kho (chưa bán)</b>.\n"
+        "• Các mã đã bán trong lịch sử đơn hàng sẽ được giữ nguyên.",
+        reply_markup=_admin_cancel_keyboard(),
+    )
+    await state.set_state(DeleteStock.waiting_codes)
+
+
+@router.message(Command("xoama"))
+async def cmd_delete_stock(message: Message, state: FSMContext) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    await _start_delete_stock(message, state)
+
+
+@router.callback_query(F.data == "admin:delete_stock")
+async def on_admin_delete_stock(cb: CallbackQuery, state: FSMContext) -> None:
+    if not _is_admin(cb.from_user.id):
+        await cb.answer("Bạn không có quyền quản trị.", show_alert=True)
+        return
+    await _start_delete_stock(cb.message, state)
+    await cb.answer("Gửi mã cần xoá khỏi kho")
+
+
+async def _handle_delete_stock_text(
+    message: Message, state: FSMContext, text: str,
+) -> None:
+    raw_codes = _extract_codes_for_delete(text)
+    if not raw_codes:
+        await message.answer(
+            "Không tìm thấy mã nào trong nội dung bạn gửi. Vui lòng gửi lại hoặc bấm Huỷ thao tác.",
+            reply_markup=_admin_cancel_keyboard(),
+        )
+        return
+
+    # Nếu có link UrBox thì đọc mã từ link, còn mã thường thì giữ nguyên để xoá được cả mã nhập sai.
+    resolved_codes: list[str] = []
+    for item in raw_codes:
+        if item.startswith("HTTP://") or item.startswith("HTTPS://"):
+            read_res = await asyncio.to_thread(checker.read_inputs, [item])
+            if read_res and read_res[0].code:
+                resolved_codes.append(read_res[0].code.upper())
+            else:
+                resolved_codes.append(item)
+        else:
+            resolved_codes.append(item)
+
+    await state.clear()
+    deleted, skipped = database.delete_available_vouchers(resolved_codes)
+
+    lines = [
+        "🗑 <b>Kết quả xoá mã khỏi kho</b>",
+        f"✅ Đã xoá: <b>{len(deleted)}</b> mã",
+    ]
+    if deleted:
+        preview = [
+            f"   • <code>{html.escape(code)}</code> ({utils.format_k(denom)})"
+            for code, denom in deleted[:20]
+        ]
+        lines.extend(preview)
+        if len(deleted) > 20:
+            lines.append(f"   <i>... và {len(deleted) - 20} mã khác</i>")
+    if skipped:
+        lines.append(f"⚠️ Không tìm thấy trong kho chưa bán: <b>{len(skipped)}</b> mã")
+        skip_preview = [f"   • <code>{html.escape(c)}</code>" for c in skipped[:12]]
+        lines.extend(skip_preview)
+        if len(skipped) > 12:
+            lines.append(f"   <i>... và {len(skipped) - 12} mã khác</i>")
+
+    lines.append("")
+    lines.append("📦 <b>Tồn kho hiện tại</b>")
+    for denom, count in database.stock_summary().items():
+        lines.append(f"   • {utils.format_vnd(denom)}: {count} mã")
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🗑 Xoá tiếp", callback_data="admin:delete_stock"),
+            InlineKeyboardButton(text="➕ Nhập kho", callback_data="admin:import"),
+        ],
+        [InlineKeyboardButton(text="⬅️ Bảng điều khiển", callback_data="admin:home")],
+    ])
+    await message.answer("\n".join(lines), reply_markup=kb)
+
+
+@router.message(DeleteStock.waiting_codes, F.document)
+async def on_delete_stock_file(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    buf = await bot.download(message.document)
+    text = buf.read().decode("utf-8", errors="ignore")
+    await _handle_delete_stock_text(message, state, text)
+
+
+@router.message(DeleteStock.waiting_codes, F.text)
+async def on_delete_stock_text(message: Message, state: FSMContext) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    if (message.text or "").strip().startswith("/"):
+        return
+    await _handle_delete_stock_text(message, state, message.text or "")
+
+
+# =========================
+# TẠO FILE HTML BARCODE TỪ CHUỖI MÃ (ADMIN)
+# =========================
+def _infer_barcode_denom(code: str, explicit_hint: str = "") -> int:
+    if explicit_hint:
+        parsed_hint = utils.parse_vnd_amount(explicit_hint)
+        if parsed_hint and 1_000 <= parsed_hint <= 100_000_000:
+            return parsed_hint
+    classified = utils.classify_denom(code)
+    if classified:
+        return classified
+    match = _UB_DENOM_PREFIX_RE.match(code)
+    if match:
+        val = int(match.group(1)) * 1_000
+        if 1_000 <= val <= 100_000_000:
+            return val
+    return 100_000
+
+
+def _parse_barcode_input_lines(text: str) -> list[tuple[str, int]]:
+    """Đọc danh sách mã (mỗi dòng 1 mã) thành [(code, denom)] để tạo file HTML barcode."""
+    vouchers: list[tuple[str, int]] = []
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [p for p in re.split(r"[\s,;|]+", line) if p]
+        if not parts:
+            continue
+        candidate = parts[0].strip().upper()
+        hint = parts[1].strip() if len(parts) > 1 else ""
+        if not _BARCODE_CODE_TOKEN_RE.match(candidate):
+            ub_matches = checker.UB_CODE_RE.findall(line)
+            if ub_matches:
+                for m in ub_matches:
+                    code_up = m.upper()
+                    vouchers.append((code_up, _infer_barcode_denom(code_up)))
+            continue
+        vouchers.append((candidate, _infer_barcode_denom(candidate, hint)))
+    return vouchers
+
+
+async def _start_barcode_builder(message: Message, state: FSMContext) -> None:
+    await message.answer(
+        "🎫 <b>Tạo file HTML giao diện thẻ + Barcode</b>\n\n"
+        "Gửi danh sách mã voucher (<b>mỗi mã 1 dòng</b> hoặc gửi file <b>.txt</b>).\n"
+        "• Bot tự nhận mệnh giá từ mã (<code>UB100...</code> → 100.000đ, <code>UB200...</code> → 200.000đ).\n"
+        "• Hoặc ghi kèm mệnh giá sau mã, ví dụ: <code>UB100K49D1399 100k</code>.\n"
+        "• File HTML xuất ra chỉ hiển thị thẻ & mã vạch Code 128, không cho khách tự tạo mã.",
+        reply_markup=_admin_cancel_keyboard(),
+    )
+    await state.set_state(BarcodeBuilder.waiting_codes)
+
+
+@router.message(Command("barcode"))
+async def cmd_barcode_builder(message: Message, state: FSMContext) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    await _start_barcode_builder(message, state)
+
+
+@router.callback_query(F.data == "admin:barcode")
+async def on_admin_barcode_builder(cb: CallbackQuery, state: FSMContext) -> None:
+    if not _is_admin(cb.from_user.id):
+        await cb.answer("Bạn không có quyền quản trị.", show_alert=True)
+        return
+    await _start_barcode_builder(cb.message, state)
+    await cb.answer("Gửi danh sách mã (mỗi mã 1 dòng)")
+
+
+async def _handle_barcode_builder_text(
+    message: Message, state: FSMContext, bot: Bot, text: str,
+) -> None:
+    vouchers = _parse_barcode_input_lines(text)
+    if not vouchers:
+        await message.answer(
+            "Không tìm thấy mã hợp lệ (4–32 ký tự A–Z, 0–9 hoặc dấu gạch ngang). "
+            "Vui lòng gửi lại hoặc bấm Huỷ thao tác.",
+            reply_markup=_admin_cancel_keyboard(),
+        )
+        return
+
+    await state.clear()
+    stamp = datetime.datetime.now(utils.VN_TZ).strftime("%Y%m%d_%H%M%S")
+    label = vouchers[0][0] if len(vouchers) == 1 else f"BARCODE_{stamp}"
+    html_str = report.render_order_vouchers_barcode_html(label, vouchers)
+    doc = BufferedInputFile(html_str.encode("utf-8"), filename=f"{label}.html")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎫 Tạo file Barcode khác", callback_data="admin:barcode")],
+        [InlineKeyboardButton(text="⬅️ Bảng điều khiển", callback_data="admin:home")],
+    ])
+    await bot.send_document(
+        message.chat.id,
+        doc,
+        caption=(
+            f"✅ <b>Đã tạo file HTML Barcode ({len(vouchers)} mã)</b>\n"
+            "👆 Bấm mở file để xem giao diện thẻ UrBox + mã vạch Code 128."
+        ),
+        reply_markup=kb,
+    )
+
+
+@router.message(BarcodeBuilder.waiting_codes, F.document)
+async def on_barcode_builder_file(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    buf = await bot.download(message.document)
+    text = buf.read().decode("utf-8", errors="ignore")
+    await _handle_barcode_builder_text(message, state, bot, text)
+
+
+@router.message(BarcodeBuilder.waiting_codes, F.text)
+async def on_barcode_builder_text(message: Message, state: FSMContext, bot: Bot) -> None:
+    if not _is_admin(message.from_user.id):
+        return
+    if (message.text or "").strip().startswith("/"):
+        return
+    await _handle_barcode_builder_text(message, state, bot, message.text or "")

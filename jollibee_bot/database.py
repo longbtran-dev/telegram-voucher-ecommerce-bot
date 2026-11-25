@@ -311,6 +311,37 @@ def list_available_vouchers() -> list[tuple[int, str, str]]:
     return [(r["denom"], r["code"], r["link"]) for r in rows]
 
 
+def delete_available_vouchers(
+    codes: list[str],
+) -> tuple[list[tuple[str, int]], list[str]]:
+    """Xoá các mã đang ở trạng thái 'available' khỏi kho.
+
+    Trả về (danh sách [(code, denom)] đã xoá, danh sách mã không xoá được/không tồn tại).
+    Các mã đã bán ('sold') hoặc đang giữ trong đơn ('reserved') sẽ không bị xoá.
+    """
+    deleted: list[tuple[str, int]] = []
+    skipped: list[str] = []
+    seen: set[str] = set()
+    with _lock:
+        for raw in codes:
+            normalized = (raw or "").strip().upper()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            row = _conn.execute(
+                "SELECT id, code, denom FROM vouchers "
+                "WHERE UPPER(code) = ? AND status = 'available' LIMIT 1",
+                (normalized,),
+            ).fetchone()
+            if row is None:
+                skipped.append(normalized)
+                continue
+            _conn.execute("DELETE FROM vouchers WHERE id = ?", (row["id"],))
+            deleted.append((row["code"], int(row["denom"])))
+        _conn.commit()
+    return deleted, skipped
+
+
 # =========================
 # NGƯỜI DÙNG (để gửi thông báo hàng loạt)
 # =========================

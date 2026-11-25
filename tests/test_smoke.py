@@ -374,10 +374,10 @@ def main() -> None:
         if button.callback_data
     }
     assert {
-        "admin:stock", "admin:import", "admin:report", "admin:history",
-        "admin:prices", "admin:settings", "admin:broadcast", "admin:confirm",
-        "admin:buyers", "admin:wallets", "admin:status", "admin:checker",
-        "admin:test", "admin:home",
+        "admin:stock", "admin:import", "admin:delete_stock", "admin:barcode",
+        "admin:report", "admin:history", "admin:prices", "admin:settings",
+        "admin:broadcast", "admin:confirm", "admin:buyers", "admin:wallets",
+        "admin:status", "admin:checker", "admin:test", "admin:home",
     } <= menu_callbacks
     test_callbacks = {
         button.callback_data
@@ -622,6 +622,32 @@ def main() -> None:
     sim_html = sim_docs[0][1].data.decode("utf-8")
     assert sim_html.count('<article class="voucher-card"') == 2
     assert "UB100KTEST01" in sim_html and "UB200KTEST02" in sim_html
+
+    # --- Admin tạo file HTML barcode từ chuỗi mã (mỗi mã 1 dòng) ---
+    parsed_barcodes = handlers_admin._parse_barcode_input_lines(
+        "UB100K49D1399\nUB200KABC123\nub100kxyz789"
+    )
+    assert parsed_barcodes == [
+        ("UB100K49D1399", 100_000),
+        ("UB200KABC123", 200_000),
+        ("UB100KXYZ789", 100_000),
+    ]
+
+    # --- Admin nhập kho bằng text & xóa mã đã thêm vào kho ---
+    assert database.add_voucher(100_000, "UB100WRONG1", "")
+    assert database.add_voucher(200_000, "UB200WRONG2", "")
+    stock_100_before_del = database.count_available(100_000)
+    stock_200_before_del = database.count_available(200_000)
+    deleted_vouchers, not_deleted_codes = database.delete_available_vouchers([
+        "UB100WRONG1",
+        "ub200wrong2",
+        "UB100DELIVERY0",  # mã đã bán -> không được xóa
+        "UBNOTEXIST99",    # mã không có trong kho
+    ])
+    assert deleted_vouchers == [("UB100WRONG1", 100_000), ("UB200WRONG2", 200_000)]
+    assert not_deleted_codes == ["UB100DELIVERY0", "UBNOTEXIST99"]
+    assert database.count_available(100_000) == stock_100_before_del - 1
+    assert database.count_available(200_000) == stock_200_before_del - 1
 
     # --- Handler webhook: xác thực, giao 1 lần và nhận retry an toàn ---
     assert database.add_voucher(100_000, "UB100WEB", "https://urbox.vn/web")
